@@ -58,6 +58,31 @@ I need to use PlanMapping & PlanCodes to generate json as below.
 	}
 ]
 
+result:
+
+[
+    {
+        "basePlanName": "plan Name",
+        "legacyPlanMapping": [
+            {
+                "planId": "p1",
+                "planName": "plan Name",
+                "quarter": "Q1"
+            }
+        ]
+    },
+    {
+        "basePlanName": "plan Name 2",
+        "legacyPlanMapping": [
+            {
+                "planId": "p3",
+                "planName": "plan Name 3",
+                "quarter": "Q4"
+            }
+        ]
+    }
+]
+
 
 
 import java.util.ArrayList;
