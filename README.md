@@ -1,62 +1,44 @@
+const plans = [
+  {
+    "planId":"p1",
+    "planName":"plan Name",
+    "quarter": "Q1"
+  },
+  {
+    "planId":"p2",
+    "planName":"plan Name 2",
+    "quarter": "Q2"
+  },
+  {
+    "planId":"p3",
+    "planName":"plan Name 3",
+    "quarter": "Q4"
+  }
+];
 
-[
-	{
-		"planId":"p1",
-		"planName":"plan Name",
-		"quarter": "Q1"
-	},
-	{
-		"planId":"p2",
-		"planName":"plan Name 2",
-		"quarter": "Q2"
-	},
-	{
-		"planId":"p3",
-		"planName":"plan Name 3",
-		"quarter": "Q4"
-	},
-]
+const planMappings = [
+  {
+    "basePlanId":null,
+    "mappedPlanId":"p1"
+  },
+  {
+    "basePlanId":null,
+    "mappedPlanId":"p2"
+  },
+  {
+    "basePlanId":"p2",
+    "mappedPlanId":"p3"
+  },
+  {
+    "basePlanId":null,
+    "mappedPlanId":"p5"
+  },
+  {
+    "basePlanId":"p5",
+    "mappedPlanId":"p6"
+  }
+];
 
-[
-	{
-		"basePlanId":null, //basePlanId may be null or empty
-		"mappedPlanId":"p1"
-	},
-	{
-		"basePlanId":"p2",
-		"mappedPlanId":"p3"
-	}
-]
-
-
-I need to use PlanMapping & PlanCodes to generate json as below.
-[
-	{
-		"basePlanName":"plan Name",
-		"legacyPlanMapping": [
-			{
-				"planId": "p1",
-				"planName": "plan Name",
-				"quater":"Q1"
-			}
-		]
-	},
-	{
-		"basePlanName":"plan Name 2",
-		"legacyPlanMapping": [
-			{
-				"planId": "p2",
-				"planName": "plan Name 2",
-				"quater":"Q2"
-			},
-			{
-				"planId": "p3",
-				"planName": "plan Name 3",
-				"quater":"Q4"
-			},
-		]
-	}
-]
 
 result:
 
@@ -84,174 +66,66 @@ result:
 ]
 
 
-
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
-public class Example {
+public class PlanMapper {
+    public static void main(String[] args) {
+        List<PlanDTO> plans = new ArrayList<>();
+        plans.add(new PlanDTO("p1", "plan Name", "Q1"));
+        plans.add(new PlanDTO("p2", "plan Name 2", "Q2"));
+        plans.add(new PlanDTO("p3", "plan Name 3", "Q4"));
 
-	public static void main(String[] args) {
-		List<PlanMapping> planMappings = mockPlanMappings();
-		List<PlanCodes> planCodes = mockPlanCodes();
+        List<PlanMappingDTO> planMappings = new ArrayList<>();
+        planMappings.add(new PlanMappingDTO(null, "p1"));
+        planMappings.add(new PlanMappingDTO(null, "p2"));
+        planMappings.add(new PlanMappingDTO("p2", "p3"));
+        planMappings.add(new PlanMappingDTO("p5", "p6"));
 
-		Map<String, PlanCodes> planMap = new HashMap<>();
-		for (PlanCodes plan : planCodes) {
-			planMap.put(plan.getPlanId(), plan);
-		}
+        List<BasePlanDTO> basePlans = new ArrayList<>();
 
-		List<BasePlan> basePlans = new ArrayList<>();
-		for (PlanMapping mapping : planMappings) {
-			if (mapping.getBasePlanId() == null || mapping.getBasePlanId().isEmpty()) {
-				PlanCodes plan = planMap.get(mapping.getMappedPlanId());
-				basePlans.add(new BasePlan(plan.getPlanName(), List.of(plan)));
-			} else {
-				PlanCodes basePlan = planMap.get(mapping.getBasePlanId());
-				List<PlanCodes> mappedPlans = new ArrayList<>();
-				for (PlanMapping innerMapping : planMappings) {
-					if (innerMapping.getBasePlanId() != null
-							&& innerMapping.getBasePlanId().equals(basePlan.getPlanId())) {
-						PlanCodes mappedPlan = planMap.get(innerMapping.getMappedPlanId());
-						mappedPlans.add(mappedPlan);
-					}
-				}
-				basePlans.add(new BasePlan(basePlan.getPlanName(), mappedPlans));
-			}
-		}
+        // Filter plans to get base plans
+        for (PlanDTO plan : plans) {
+            boolean isBasePlan = true;
+            for (PlanMappingDTO planMapping : planMappings) {
+                if (planMapping.getMappedPlanId().equals(plan.getPlanId()) && planMapping.getBasePlanId() != null) {
+                    isBasePlan = false;
+                    break;
+                }
+            }
+            if (isBasePlan) {
+                List<LegacyPlanMappingDTO> legacyPlanMappings = new ArrayList<>();
+                legacyPlanMappings.add(new LegacyPlanMappingDTO(plan.getPlanId(), plan.getPlanName(), plan.getQuarter()));
+                BasePlanDTO basePlan = new BasePlanDTO(plan.getPlanName(), legacyPlanMappings);
 
-		String json = toJSON(basePlans);
-		System.out.println(json);
-	}
+                // Find regional plans for this base plan
+                for (PlanMappingDTO planMapping : planMappings) {
+                    if (planMapping.getBasePlanId() != null && planMapping.getBasePlanId().equals(plan.getPlanId())) {
+                        PlanDTO regionalPlan = plans.stream()
+                                .filter(p -> p.getPlanId().equals(planMapping.getMappedPlanId()))
+                                .findFirst()
+                                .orElse(null);
+                        if (regionalPlan != null) {
+                            legacyPlanMappings.add(new LegacyPlanMappingDTO(regionalPlan.getPlanId(), regionalPlan.getPlanName(), regionalPlan.getQuarter()));
+                        }
+                    }
+                }
 
-	private static List<PlanMapping> mockPlanMappings() {
-		List<PlanMapping> planMappings = new ArrayList<>();
-		planMappings.add(new PlanMapping(null, "p1"));
-		planMappings.add(new PlanMapping("p2", "p3"));
-		return planMappings;
-	}
+                basePlans.add(basePlan);
+            }
+        }
 
-	private static List<PlanCodes> mockPlanCodes() {
-		List<PlanCodes> planCodes = new ArrayList<>();
-		planCodes.add(new PlanCodes("p1", "plan Name", "Q1"));
-		planCodes.add(new PlanCodes("p2", "plan Name 2", "Q2"));
-		planCodes.add(new PlanCodes("p3", "plan Name 3", "Q4"));
-		return planCodes;
-	}
-
-	private static String toJSON(List<BasePlan> basePlans) {
-		StringBuilder sb = new StringBuilder("[");
-		for (int i = 0; i < basePlans.size(); i++) {
-			BasePlan basePlan = basePlans.get(i);
-			sb.append("{");
-			sb.append("\"basePlanName\":\"").append(basePlan.getBasePlanName()).append("\",");
-			sb.append("\"legacyPlanMapping\":[");
-			for (int j = 0; j < basePlan.getLegacyPlanMapping().size(); j++) {
-				PlanCodes plan = basePlan.getLegacyPlanMapping().get(j);
-				sb.append("{");
-				sb.append("\"planId\":\"").append(plan.getPlanId()).append("\",");
-				sb.append("\"planName\":\"").append(plan.getPlanName()).append("\",");
-				sb.append("\"quarter\":\"").append(plan.getQuarter()).append("\"");
-				sb.append("}");
-				if (j < basePlan.getLegacyPlanMapping().size() - 1) {
-					sb.append(",");
-				}
-			}
-			sb.append("]}");
-			if (i < basePlans.size() - 1) {
-				sb.append(",");
-			}
-		}
-		sb.append("]");
-		return sb.toString();
-	}
-
+        // Print base plans and their legacy plan mappings
+        for (BasePlanDTO basePlan : basePlans) {
+            System.out.println("Base Plan Name: " + basePlan.getBasePlanName());
+            System.out.println("Legacy Plan Mappings:");
+            for (LegacyPlanMappingDTO legacyPlanMapping : basePlan.getLegacyPlanMapping()) {
+                System.out.println("Plan ID: " + legacyPlanMapping.getPlanId());
+                System.out.println("Plan Name: " + legacyPlanMapping.getPlanName());
+                System.out.println("Quarter: " + legacyPlanMapping.getQuarter());
+            }
+            System.out.println();
+        }
+    }
 }
 
-class BasePlan {
-	private String basePlanName;
-	private List<PlanCodes> legacyPlanMapping;
-
-	public BasePlan(String basePlanName, List<PlanCodes> legacyPlanMapping) {
-		this.basePlanName = basePlanName;
-		this.legacyPlanMapping = legacyPlanMapping;
-	}
-
-	public String getBasePlanName() {
-		return basePlanName;
-	}
-
-	public void setBasePlanName(String basePlanName) {
-		this.basePlanName = basePlanName;
-	}
-
-	public List<PlanCodes> getLegacyPlanMapping() {
-		return legacyPlanMapping;
-	}
-
-	public void setLegacyPlanMapping(List<PlanCodes> legacyPlanMapping) {
-		this.legacyPlanMapping = legacyPlanMapping;
-	}
-}
-
-class PlanCodes {
-	private String planId;
-	private String planName;
-	private String quarter;
-
-	public PlanCodes(String planId, String planName, String quarter) {
-		this.planId = planId;
-		this.planName = planName;
-		this.quarter = quarter;
-	}
-
-	public String getPlanId() {
-		return planId;
-	}
-
-	public void setPlanId(String planId) {
-		this.planId = planId;
-	}
-
-	public String getPlanName() {
-		return planName;
-	}
-
-	public void setPlanName(String planName) {
-		this.planName = planName;
-	}
-
-	public String getQuarter() {
-		return quarter;
-	}
-
-	public void setQuarter(String quarter) {
-		this.quarter = quarter;
-	}
-}
-
-class PlanMapping {
-	private String basePlanId;
-	private String mappedPlanId;
-
-	public PlanMapping(String basePlanId, String mappedPlanId) {
-		this.basePlanId = basePlanId;
-		this.mappedPlanId = mappedPlanId;
-	}
-
-	public String getBasePlanId() {
-		return basePlanId;
-	}
-
-	public void setBasePlanId(String basePlanId) {
-		this.basePlanId = basePlanId;
-	}
-
-	public String getMappedPlanId() {
-		return mappedPlanId;
-	}
-
-	public void setMappedPlanId(String mappedPlanId) {
-		this.mappedPlanId = mappedPlanId;
-	}
-}
