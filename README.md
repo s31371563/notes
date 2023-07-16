@@ -1,131 +1,130 @@
-const plans = [
-  {
-    "planId":"p1",
-    "planName":"plan Name",
-    "quarter": "Q1"
-  },
-  {
-    "planId":"p2",
-    "planName":"plan Name 2",
-    "quarter": "Q2"
-  },
-  {
-    "planId":"p3",
-    "planName":"plan Name 3",
-    "quarter": "Q4"
-  }
-];
+using System;
+using System.Data.SqlClient;
+using System.Text;
 
-const planMappings = [
-  {
-    "basePlanId":null,
-    "mappedPlanId":"p1"
-  },
-  {
-    "basePlanId":null,
-    "mappedPlanId":"p2"
-  },
-  {
-    "basePlanId":"p2",
-    "mappedPlanId":"p3"
-  },
-  {
-    "basePlanId":null,
-    "mappedPlanId":"p5"
-  },
-  {
-    "basePlanId":"p5",
-    "mappedPlanId":"p6"
-  }
-];
+public class CDCRollback
+{
+    private string connectionString = "Data Source=your_server;Initial Catalog=your_database;Integrated Security=True";
 
-
-result:
-
-[
+    public void RollbackChanges(string updateTs, int updatedPersonKey)
     {
-        "basePlanName": "plan Name",
-        "legacyPlanMapping": [
+        using (SqlConnection connection = new SqlConnection(connectionString))
+        {
+            connection.Open();
+
+            // Step 1: Identify CDC Tables
+            string[] cdcTables = GetCDCEnabledTables(connection);
+
+            // Step 2: Retrieve CDC Data and Step 3: Generate Rollback Script
+            StringBuilder rollbackScriptBuilder = new StringBuilder();
+            foreach (string cdcTable in cdcTables)
             {
-                "planId": "p1",
-                "planName": "plan Name",
-                "quarter": "Q1"
+                string rollbackScript = GetRollbackScriptForTable(connection, cdcTable, updateTs, updatedPersonKey);
+                rollbackScriptBuilder.AppendLine(rollbackScript);
             }
-        ]
-    },
-    {
-        "basePlanName": "plan Name 2",
-        "legacyPlanMapping": [
+
+            // Step 4: Execute the Rollback Script
+            SqlTransaction transaction = connection.BeginTransaction();
+            try
             {
-                "planId": "p3",
-                "planName": "plan Name 3",
-                "quarter": "Q4"
+                SqlCommand cmd = connection.CreateCommand();
+                cmd.Transaction = transaction;
+                cmd.CommandText = rollbackScriptBuilder.ToString();
+                cmd.ExecuteNonQuery();
+                transaction.Commit();
+                Console.WriteLine("Rollback successful.");
             }
-        ]
+            catch (Exception ex)
+            {
+                transaction.Rollback();
+                Console.WriteLine("Rollback failed: " + ex.Message);
+            }
+        }
     }
-]
 
-
-import java.util.ArrayList;
-import java.util.List;
-
-public class PlanMapper {
-    public static void main(String[] args) {
-        List<PlanDTO> plans = new ArrayList<>();
-        plans.add(new PlanDTO("p1", "plan Name", "Q1"));
-        plans.add(new PlanDTO("p2", "plan Name 2", "Q2"));
-        plans.add(new PlanDTO("p3", "plan Name 3", "Q4"));
-
-        List<PlanMappingDTO> planMappings = new ArrayList<>();
-        planMappings.add(new PlanMappingDTO(null, "p1"));
-        planMappings.add(new PlanMappingDTO(null, "p2"));
-        planMappings.add(new PlanMappingDTO("p2", "p3"));
-        planMappings.add(new PlanMappingDTO("p5", "p6"));
-
-        List<BasePlanDTO> basePlans = new ArrayList<>();
-
-        // Filter plans to get base plans
-        for (PlanDTO plan : plans) {
-            boolean isBasePlan = true;
-            for (PlanMappingDTO planMapping : planMappings) {
-                if (planMapping.getMappedPlanId().equals(plan.getPlanId()) && planMapping.getBasePlanId() != null) {
-                    isBasePlan = false;
-                    break;
+    private string[] GetCDCEnabledTables(SqlConnection connection)
+    {
+        // Query the system tables to identify CDC-enabled tables.
+        List<string> cdcTables = new List<string>();
+        using (SqlCommand cmd = new SqlCommand("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE COLUMN_NAME = 'updateTs' AND TABLE_NAME IN (SELECT TABLE_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE COLUMN_NAME = 'updatedPersonKey');", connection))
+        {
+            using (SqlDataReader reader = cmd.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    cdcTables.Add(reader["TABLE_NAME"].ToString());
                 }
             }
-            if (isBasePlan) {
-                List<LegacyPlanMappingDTO> legacyPlanMappings = new ArrayList<>();
-                legacyPlanMappings.add(new LegacyPlanMappingDTO(plan.getPlanId(), plan.getPlanName(), plan.getQuarter()));
-                BasePlanDTO basePlan = new BasePlanDTO(plan.getPlanName(), legacyPlanMappings);
+        }
+        return cdcTables.ToArray();
+    }
 
-                // Find regional plans for this base plan
-                for (PlanMappingDTO planMapping : planMappings) {
-                    if (planMapping.getBasePlanId() != null && planMapping.getBasePlanId().equals(plan.getPlanId())) {
-                        PlanDTO regionalPlan = plans.stream()
-                                .filter(p -> p.getPlanId().equals(planMapping.getMappedPlanId()))
-                                .findFirst()
-                                .orElse(null);
-                        if (regionalPlan != null) {
-                            legacyPlanMappings.add(new LegacyPlanMappingDTO(regionalPlan.getPlanId(), regionalPlan.getPlanName(), regionalPlan.getQuarter()));
-                        }
+    private string GetRollbackScriptForTable(SqlConnection connection, string cdcTable, string updateTs, int updatedPersonKey)
+    {
+        StringBuilder rollbackScriptBuilder = new StringBuilder();
+
+        // Prepare the CDC function name based on the CDC table name
+        string cdcFunctionName = "cdc.fn_cdc_get_all_changes_" + cdcTable;
+
+        // Query the CDC data for the given table and filter by updateTs and updatedPersonKey
+        string queryString = $"SELECT __$operation, * FROM {cdcFunctionName}(@from_lsn, @to_lsn, N'all update old') " +
+                             "WHERE updateTs = @updateTs AND updatedPersonKey = @updatedPersonKey " +
+                             "ORDER BY __$seqval DESC;"; // <-- Retrieve data in descending order of CDC timestamp
+
+        using (SqlCommand cmd = new SqlCommand(queryString, connection))
+        {
+            cmd.Parameters.AddWithValue("@from_lsn", SqlDbType.Binary).Value = DBNull.Value;
+            cmd.Parameters.AddWithValue("@to_lsn", SqlDbType.Binary).Value = DBNull.Value;
+            cmd.Parameters.AddWithValue("@updateTs", SqlDbType.DateTime).Value = DateTime.Parse(updateTs);
+            cmd.Parameters.AddWithValue("@updatedPersonKey", SqlDbType.Int).Value = updatedPersonKey;
+
+            using (SqlDataReader reader = cmd.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    string operation = reader["__$operation"].ToString();
+
+                    switch (operation)
+                    {
+                        case "1": // Delete
+                            rollbackScriptBuilder.AppendLine($"INSERT INTO {cdcTable} SELECT * FROM cdc.{cdcTable}_CT WHERE __$seqval = {reader["__$seqval"]};");
+                            break;
+                        case "2": // Insert
+                            rollbackScriptBuilder.AppendLine($"DELETE FROM {cdcTable} WHERE __$seqval = {reader["__$seqval"]};");
+                            break;
+                        case "3": // Update
+                            rollbackScriptBuilder.AppendLine($"UPDATE {cdcTable} SET {GetColumnUpdatesForUpdate(reader)} WHERE __$seqval = {reader["__$seqval"]};");
+                            break;
+                        default:
+                            break;
                     }
                 }
-
-                basePlans.add(basePlan);
             }
         }
 
-        // Print base plans and their legacy plan mappings
-        for (BasePlanDTO basePlan : basePlans) {
-            System.out.println("Base Plan Name: " + basePlan.getBasePlanName());
-            System.out.println("Legacy Plan Mappings:");
-            for (LegacyPlanMappingDTO legacyPlanMapping : basePlan.getLegacyPlanMapping()) {
-                System.out.println("Plan ID: " + legacyPlanMapping.getPlanId());
-                System.out.println("Plan Name: " + legacyPlanMapping.getPlanName());
-                System.out.println("Quarter: " + legacyPlanMapping.getQuarter());
+        return rollbackScriptBuilder.ToString();
+    }
+
+    private string GetColumnUpdatesForUpdate(SqlDataReader reader)
+    {
+        // Assuming you have columns other than __$seqval, updateTs, and updatedPersonKey.
+        // You need to exclude these columns from the update statement.
+        StringBuilder columnUpdatesBuilder = new StringBuilder();
+        for (int i = 0; i < reader.FieldCount; i++)
+        {
+            string columnName = reader.GetName(i);
+            if (columnName != "__$seqval" && columnName != "updateTs" && columnName != "updatedPersonKey" && reader[i] != DBNull.Value)
+            {
+                columnUpdatesBuilder.Append($"{columnName} = '{reader[i]}', ");
             }
-            System.out.println();
         }
+
+        // Remove the trailing comma and space
+        if (columnUpdatesBuilder.Length > 0)
+        {
+            columnUpdatesBuilder.Length -= 2;
+        }
+
+        return columnUpdatesBuilder.ToString();
     }
 }
-
