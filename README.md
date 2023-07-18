@@ -300,6 +300,23 @@ public class CDCRollback
     }
 }
 
+    private string GetPrimaryKeyConditionsForUpdate(SqlDataReader reader, List<string> primaryKeyColumns)
+    {
+        // Create the conditions for the primary key columns to be used in UPDATE statement
+        StringBuilder primaryKeyConditionsBuilder = new StringBuilder();
+        foreach (var column in primaryKeyColumns)
+        {
+            primaryKeyConditionsBuilder.Append($"{column} = '{reader[column]}' AND ");
+        }
+
+        // Remove the trailing "AND"
+        if (primaryKeyConditionsBuilder.Length > 0)
+        {
+            primaryKeyConditionsBuilder.Length -= 5;
+        }
+
+        return primaryKeyConditionsBuilder.ToString();
+    }
 
   case "1": // Delete
                             rollbackScriptBuilder.AppendLine($"INSERT INTO {cdcTable} ({string.Join(", ", primaryKeyColumns)}) SELECT {string.Join(", ", primaryKeyColumns)} FROM cdc.{cdcTable}_CT WHERE __$seqval = {reader["__$seqval"]};");
@@ -310,3 +327,5 @@ public class CDCRollback
                         case "3": // Update
                             rollbackScriptBuilder.AppendLine($"UPDATE {cdcTable} SET {GetColumnUpdatesForUpdate(reader, primaryKeyColumns)} WHERE {GetPrimaryKeyConditionsForUpdate(reader, primaryKeyColumns)};");
                             break;
+
+
