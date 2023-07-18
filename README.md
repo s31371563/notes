@@ -299,3 +299,14 @@ public class CDCRollback
         return columnUpdatesBuilder.ToString();
     }
 }
+
+
+  case "1": // Delete
+                            rollbackScriptBuilder.AppendLine($"INSERT INTO {cdcTable} ({string.Join(", ", primaryKeyColumns)}) SELECT {string.Join(", ", primaryKeyColumns)} FROM cdc.{cdcTable}_CT WHERE __$seqval = {reader["__$seqval"]};");
+                            break;
+                        case "2": // Insert
+                            rollbackScriptBuilder.AppendLine($"DELETE FROM {cdcTable} WHERE {GetPrimaryKeyConditionsForDelete(reader, primaryKeyColumns)};");
+                            break;
+                        case "3": // Update
+                            rollbackScriptBuilder.AppendLine($"UPDATE {cdcTable} SET {GetColumnUpdatesForUpdate(reader, primaryKeyColumns)} WHERE {GetPrimaryKeyConditionsForUpdate(reader, primaryKeyColumns)};");
+                            break;
