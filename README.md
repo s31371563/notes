@@ -329,3 +329,9 @@ public class CDCRollback
                             break;
 
 
+
+
+  byte[] seqvalBytes = (byte[])reader["__$seqval"];
+
+                        // Convert byte array to a long integer (int64)
+                        long seqval = BitConverter.ToInt64(seqvalBytes, 0);
