@@ -128,3 +128,20 @@ public class CDCRollback
         return columnUpdatesBuilder.ToString();
     }
 }
+
+    private List<string> GetPrimaryKeyColumns(SqlConnection connection, string tableName)
+    {
+        // Query the system tables to get the primary key columns for the given table
+        List<string> primaryKeyColumns = new List<string>();
+        using (SqlCommand cmd = new SqlCommand($"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE OBJECTPROPERTY(OBJECT_ID(CONSTRAINT_SCHEMA + '.' + CONSTRAINT_NAME), 'IsPrimaryKey') = 1 AND TABLE_NAME = '{tableName}';", connection))
+        {
+            using (SqlDataReader reader = cmd.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    primaryKeyColumns.Add(reader["COLUMN_NAME"].ToString());
+                }
+            }
+        }
+        return primaryKeyColumns;
+    }
