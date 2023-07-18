@@ -335,3 +335,19 @@ public class CDCRollback
 
                         // Convert byte array to a long integer (int64)
                         long seqval = BitConverter.ToInt64(seqvalBytes, 0);
+
+
+
+
+
+
+
+
+                         string operation = reader["__$operation"].ToString();
+                byte[] seqvalBytes = (byte[])reader["__$seqval"];
+                string seqvalHexString = BitConverter.ToString(seqvalBytes).Replace("-", ""); // Convert binary value to hexadecimal string
+
+                switch (operation)
+                {
+                    case "1": // Delete
+                        rollbackScriptBuilder.AppendLine($"INSERT INTO {cdcTable} ({string.Join(", ", primaryKeyColumns)}) SELECT {string.Join(", ", primaryKeyColumns)} FROM cdc.{cdcTable}_CT WHERE __$seqval = 0x{seqvalHexString};");
