@@ -1,8 +1,18 @@
+import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.List;
+import java.util.Map;
+
 @Service
 public class DynamoDBService {
 
     @Autowired
-    private DynamoDBTemplate dynamoDBTemplate;
+    private DynamoDBMapper dynamoDBMapper;
 
     public void performOperationsFromFile(String filePath) throws IOException {
         String jsonData = new String(Files.readAllBytes(Paths.get(filePath)));
@@ -15,18 +25,18 @@ public class DynamoDBService {
             switch (operationType) {
                 case "insert":
                     List<Map<String, Object>> insertItems = (List<Map<String, Object>>) operation.get("items");
-                    dynamoDBTemplate.batchSave(insertItems, tableName);
+                    batchSave(tableName, insertItems);
                     break;
                 case "update":
                     List<Map<String, Object>> updateItems = (List<Map<String, Object>>) operation.get("updates");
                     for (Map<String, Object> updateItem : updateItems) {
-                        dynamoDBTemplate.save(updateItem, tableName);
+                        dynamoDBMapper.save(updateItem);
                     }
                     break;
                 case "delete":
                     List<Map<String, Object>> deleteKeys = (List<Map<String, Object>>) operation.get("keys");
                     for (Map<String, Object> deleteKey : deleteKeys) {
-                        dynamoDBTemplate.delete(deleteKey, tableName);
+                        dynamoDBMapper.delete(deleteKey);
                     }
                     break;
                 default:
@@ -39,7 +49,16 @@ public class DynamoDBService {
         ObjectMapper objectMapper = new ObjectMapper();
         return objectMapper.readValue(jsonData, List.class);
     }
+
+    private void batchSave(String tableName, List<Map<String, Object>> items) {
+        List<Object> entities = items.stream()
+                .map(item -> dynamoDBMapper.map(item, YourEntityClass.class))
+                .collect(Collectors.toList());
+
+        dynamoDBMapper.batchSave(entities);
+    }
 }
+
 
 [
     {
