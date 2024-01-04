@@ -13,8 +13,9 @@ COPY update_and_run.sh /app/
 # Make the script executable
 RUN chmod +x /app/update_and_run.sh
 
-# Expose all ports
-EXPOSE 0-65535
+# Expose ports
+EXPOSE 8080
+EXPOSE 8081
 
 # Command to run the script
 CMD ["/app/update_and_run.sh"]
