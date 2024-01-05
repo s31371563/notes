@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 # Define project and repository information
 PROJECT1_REPO="https://github.com/your_username/project1.git"
 PROJECT2_REPO="https://github.com/your_username/project2.git"
@@ -43,8 +45,8 @@ remove_and_recreate_container() {
     IMAGE_NAME="multi-project-image"
 
     # Stop and remove the existing container
-    podman stop $CONTAINER_NAME
-    podman rm $CONTAINER_NAME
+    podman stop $CONTAINER_NAME || true
+    podman rm $CONTAINER_NAME || true
 
     # Run a new container
     echo "Running a new container..."
@@ -64,9 +66,16 @@ run_projects() {
 clone_or_update_repo $PROJECT1_REPO
 clone_or_update_repo $PROJECT2_REPO
 
-# Copy Dockerfiles into project directories
-cp Dockerfile_project1 project1/Dockerfile
-cp Dockerfile_project2 project2/Dockerfile
+# Create a common Dockerfile
+cat <<EOL > Dockerfile
+FROM adoptopenjdk:17-jdk-hotspot
+
+WORKDIR /app
+
+COPY . .
+
+CMD ["bash"]
+EOL
 
 # Build Podman image
 echo "Building Podman image..."
