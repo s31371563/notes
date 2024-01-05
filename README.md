@@ -62,52 +62,48 @@ run_projects() {
     podman exec -it $CONTAINER_NAME /bin/bash -c "java -jar /app/project2/target/your_project2_jar_file.jar &"
 }
 
+# Check if MySQL container exists
+MYSQL_CONTAINER_NAME="mysql-container"
+if podman inspect -t container $MYSQL_CONTAINER_NAME &> /dev/null; then
+    echo "Using existing MySQL container $MYSQL_CONTAINER_NAME"
+else
+    # Start MySQL container
+    echo "Starting MySQL container..."
+    podman run --name $MYSQL_CONTAINER_NAME -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=projectdb -p 3306:3306 -d docker.io/library/mysql:latest
+fi
+
+# Check if DynamoDB container exists
+DYNAMODB_CONTAINER_NAME="dynamodb-container"
+if podman inspect -t container $DYNAMODB_CONTAINER_NAME &> /dev/null; then
+    echo "Using existing DynamoDB container $DYNAMODB_CONTAINER_NAME"
+else
+    # Start DynamoDB container
+    echo "Starting DynamoDB container..."
+    podman run --name $DYNAMODB_CONTAINER_NAME -p 8000:8000 -d amazon/dynamodb-local
+fi
+
 # Clone or update both projects
 clone_or_update_repo $PROJECT1_REPO
 clone_or_update_repo $PROJECT2_REPO
 
-# Create a common Dockerfile
-cat <<EOL > Dockerfile
-FROM adoptopenjdk:17-jdk-hotspot
-
-WORKDIR /app
-
-COPY . .
-
-CMD ["bash"]
-EOL
-
-# Build Podman image
-echo "Building Podman image..."
-podman build -t multi-project-image .
-
-# Run MySQL and DynamoDB containers
-echo "Starting MySQL container..."
-podman run --name mysql-container -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=projectdb -p 3306:3306 -d docker.io/library/mysql:latest
-
-echo "Starting DynamoDB container..."
-podman run --name dynamodb-container -p 8000:8000 -d amazon/dynamodb-local
-
-# Install dependencies and copy repositories into the container
-install_dependencies mysql-container
-install_dependencies dynamodb-container
-podman cp project1 mysql-container:/app
-podman cp project2 dynamodb-container:/app
+# Install dependencies and copy repositories into the containers
+install_dependencies $MYSQL_CONTAINER_NAME
+install_dependencies $DYNAMODB_CONTAINER_NAME
+podman cp project1 $MYSQL_CONTAINER_NAME:/app
+podman cp project2 $DYNAMODB_CONTAINER_NAME:/app
 
 # Check if the container exists
 CONTAINER_NAME="multi-project-container"
 if podman inspect -t container $CONTAINER_NAME &> /dev/null; then
     echo "Updating existing container $CONTAINER_NAME"
     # Build and run projects in the existing container
-    build_projects project1
-    build_projects project2
+    build_projects $CONTAINER_NAME
     run_projects $CONTAINER_NAME
 else
     # Run a new container
     remove_and_recreate_container $CONTAINER_NAME
     # Build and run projects in the new container
-    build_projects project1
-    build_projects project2
+    build_projects $CONTAINER_NAME
     run_projects $CONTAINER_NAME
     echo "Setup completed successfully!"
 fi
